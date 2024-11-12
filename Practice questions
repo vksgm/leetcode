@@ -1,0 +1,1345 @@
+**&---------------------------------------------------------------------*
+**& Report ZDEMO_RAP
+**&---------------------------------------------------------------------*
+**&
+**&---------------------------------------------------------------------*
+* Check how insert works in sorted/ hashed tables
+* Sy-index and Sy-tabix values in do and loop statements
+* Read sorted table/ hashed tables
+
+REPORT zdemo_rap.
+*
+TYPES: BEGIN OF ty_input,
+         int TYPE int2,
+       END OF ty_input.
+
+* SQL
+
+SELECT * FROM mara ORDER BY CASE WHEN mtart = 'EPA' THEN 1 ELSE 0 END ASCENDING, matnr INTO TABLE @DATA(lt_matnr).
+
+
+SELECT matnr, mtart FROM mara WHERE EXISTS ( SELECT  * FROM mara WHERE mtart LIKE 'Z%' ) GROUP BY matnr, mtart HAVING COUNT( mtart ) GT 1 INTO TABLE @DATA(lt_test).
+
+
+SELECT COUNT( DISTINCT matnr ) FROM mara GROUP BY mtart HAVING COUNT( matnr ) GT 1 INTO TABLE @DATA(lt_Count).
+
+
+  SELECT * FROM mara INTO TABLE @DATA(lt_limit) ORDER BY matnr DESCENDING .
+
+
+* Unbounded Preceding
+  SELECT  first_Value( matnr ) OVER( PARTITION BY mtart ORDER BY matnr DESCENDING
+    rows BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW ) FROM mara INTO TABLE @DATA(lt_first_mara). " Current row
+
+ SELECT  first_Value( matnr ) OVER( PARTITION BY mtart ORDER BY matnr DESCENDING
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING ) FROM mara  INTO TABLE @lt_first_mara .  " Unbounded Following
+
+
+    SELECT  first_Value( matnr ) OVER( PARTITION BY mtart ORDER BY matnr DESCENDING
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING ) FROM mara INTO TABLE @lt_first_mara .  " Unbounded Following
+
+*--ALWAYS REMEMBER!! THE NUMBER OF COLUMNS IN THE FIELD LIST OF THE SUBQUERY SHOULD MATCH WITH THE WHERE CLAUSE FIELD. ( 1 : 1 ).
+
+* Eg. Below query has syntax error as matnr NE matnr, werks combination.
+
+*  SELECT a~matnr,mtart FROM mara as a INNER JOIN mard as b on a~matnr = b~matnr WHERE a~matnr in (  select matnr,werks FROM mard GROUP BY matnr,werks HAVING COUNT(*) GT 1 )
+*    INTO TABLE @DATA(lt_test2).
+
+* Below Query works.
+SELECT a~matnr,mtart FROM mara AS a INNER JOIN mard AS b ON a~matnr = b~matnr WHERE a~matnr IN (  SELECT matnr FROM mard GROUP BY matnr,werks HAVING COUNT(*) GT 1 )
+    INTO TABLE @DATA(lt_test2).
+
+*The other way to write the same HERE it compares ANY Material
+
+  SELECT a~matnr,mtart FROM mara AS a INNER JOIN mard AS b ON a~matnr = b~matnr WHERE a~matnr = ANY (  SELECT matnr FROM mard GROUP BY matnr,werks HAVING COUNT(*) GT 1 )
+    INTO TABLE @lt_test2.
+
+
+DATA: lt_input TYPE STANDARD TABLE OF ty_input.
+
+TYPES: tt_input TYPE STANDARD TABLE OF ty_input WITH DEFAULT KEY.
+
+lt_input = VALUE #( ( int = 16 )
+                    ( int =  17 )
+                    ( int = 4 )
+                    ( int = 3 )
+                    ( int = 5 )
+                    ( int =  2 )
+                    ).
+DATA lt_out LIKE STANDARD TABLE OF  lt_input .
+
+DATA lt_sort_Ex TYPE SORTED TABLE OF ty_input WITH NON-UNIQUE KEY int.
+DATA lt_hash_Ex TYPE HASHED TABLE OF ty_input WITH UNIQUE KEY int WITH UNIQUE SORTED KEY  key COMPONENTS int. " Secondary keys
+
+
+READ TABLE lt_hash_Ex WITH TABLE KEY key COMPONENTS int = 17 TRANSPORTING NO FIELDS. " Do binary search by default
+
+READ TABLE lt_hash_Ex WITH TABLE KEY int = 1 TRANSPORTING NO FIELDS. " Use hash mechanism
+
+READ TABLE lt_sort_Ex INDEX 1 TRANSPORTING NO FIELDS.
+
+lt_sort_ex = lt_input. " Store the records in sorted order
+lt_hash_Ex = lt_input. " Store it in the same order of the input.
+
+
+SELECT a~matnr, a~mtart, b~werks FROM mara AS a INNER JOIN  mard AS b ON a~matnr NE b~matnr
+
+*  WHERE a~matnr NE b~matnr
+   INTO TABLE @DATA(lt_join).
+
+DATA lv_String TYPE string VALUE 'Hello'.
+
+
+* Internal table types:
+
+* ------------------------------------Standard table combinations--------------------------------------*
+
+*DATA lt_std_unique TYPE STANDARD TABLE OF mara WITH UNIQUE key mtart ---> Unique Key not possible in std. table.
+DATA lt_std_table TYPE STANDARD TABLE OF mara WITH NON-UNIQUE KEY mtart.
+
+SELECT * FROM mara INTO TABLE lt_std_table UP TO 2000 ROWS.
+
+
+DATA lt_std_sort_bismt TYPE STANDARD TABLE OF mara WITH NON-UNIQUE SORTED KEY type COMPONENTS ersda.
+
+SELECT * FROM mara INTO TABLE lt_std_sort_bismt UP TO 2000 ROWS.
+
+LOOP AT lt_std_sort_bismt ASSIGNING FIELD-SYMBOL(<Lfs_bismt>).
+
+  <lfs_bismt>-ernam = sy-uname.
+
+ENDLOOP.
+
+DATA lt_std_Def TYPE STANDARD TABLE OF mara WITH DEFAULT KEY.
+
+
+SELECT * FROM mara INTO TABLE lt_std_def UP TO 100 ROWS.
+
+
+DATA lt_std_emp TYPE STANDARD TABLE OF mara WITH EMPTY KEY.
+
+SELECT * FROM mara INTO TABLE lt_Std_emp UP TO 100 ROWS.
+
+
+GET RUN TIME FIELD DATA(lv_start).
+READ TABLE lt_std_sort_bismt WITH KEY bismt = 21147 TRANSPORTING NO FIELDS . " Will be of no use as it will try to search with primary key only; you get a warning
+GET RUN TIME FIELD DATA(lv_end).
+
+DATA(lv_result) = lv_end - lv_start.
+
+
+*GET RUN TIME FIELD lv_Start.
+*READ TABLE lt_std_sort_bismt WITH TABLE KEY type COMPONENTS bismt = 21147 TRANSPORTING NO FIELDS.
+*GET RUN TIME FIELD lv_End.
+
+lv_result = lv_end - lv_start.
+
+*-------------------------------------------------------------------------------------------------------*
+
+*---------------------------------Sorted Table COmbinations------------------------------------------------------*
+
+DATA lt_sort_table TYPE SORTED TABLE OF mara WITH NON-UNIQUE KEY mtart.
+
+SELECT * FROM mara INTO TABLE lt_sort_Table UP TO 100 ROWS.
+
+
+READ TABLE lt_sort_Table WITH TABLE KEY mtart = 'ZMWM' TRANSPORTING NO FIELDS.
+
+DATA lt_Sort_Table_u TYPE SORTED TABLE OF mara WITH NON-UNIQUE KEY mtart. " Should dump ?
+
+SELECT * FROM mara INTO TABLE lt_sort_table_u UP TO 100 ROWS.
+
+DATA lt_sort_comp TYPE SORTED TABLE OF mara WITH  NON-UNIQUE KEY primary_key COMPONENTS bismt.
+SELECT * FROM mara INTO TABLE lt_sort_comp UP TO 2000 ROWS.
+
+
+DATA lt_sort_uniq TYPE SORTED TABLE OF mara WITH NON-UNIQUE KEY primary_key COMPONENTS bismt.
+
+SELECT * FROM mara INTO TABLE lt_sort_uniq UP TO 2000 ROWS.
+*----------------------------------------------------------------------------------------------------------------*
+
+*-------------------------------- Hash Table Combinations-------------------------------------------------------------*
+
+*DATA lt_hash_tab TYPE HASHED TABLE OF
+
+
+*----------------------------------------------------------------------------------------------------------------------*
+
+*BREAK-POINT.
+DATA lv_right_max TYPE int2.
+lv_right_max = -1.
+
+LOOP AT lt_input ASSIGNING FIELD-SYMBOL(<lfs_int>) FROM lines( lt_input ) TO 1 .
+
+  DATA(lv_curr_val) = <lfs_int>-int. " DONT HESITATE TO DECLARE NEW VARIBLES WHENEVER NEEDED
+  <lfs_int>-int = lv_right_max.
+
+  lv_right_max = COND #( WHEN  lv_curr_Val GE lv_right_max THEN lv_curr_val
+                         ELSE lv_right_max ). " Update the new max value
+
+ENDLOOP.
+
+
+
+*---> Equilibrium Array
+*Equilibrium Array
+*{-7, 1, 5, 2, -4, 3, 0}
+
+*DATA: lt_int TYPE S
+
+DATA(lv_left_Sum) = 0.
+DATA(lv_right_sum) = 0.
+
+DATA(lv_total_Sum) = REDUCE int2( INIT i TYPE int2 FOR ls_int IN lt_input NEXT i = i + ls_int-int ).
+
+
+DO lines( lt_input ) TIMES.
+
+  lv_left_sum = COND #( WHEN sy-index = 1 THEN 0
+            ELSE lv_left_sum + lt_input[ sy-index ]-int ).
+
+  lv_right_sum = COND #( WHEN Sy-index = lines( lt_input ) THEN 0
+             ELSE ( lv_total_Sum - lv_left_sum  ) ).
+
+
+  IF lv_left_sum = lv_right_sum.
+
+    WRITE : sy-tabix.
+
+    EXIT.
+
+  ENDIF.
+ENDDO.
+
+WRITE: |- 1|.
+
+
+* # 496. First Greater Element from right
+TYPES: BEGIN OF ty_stack,
+         int TYPE int2,
+         val TYPE int2,
+       END OF ty_stack.
+
+DATA: lt_input_Stack TYPE STANDARD TABLE OF ty_stack,
+      lt_temp_stack  TYPE STANDARD TABLE OF ty_stack.
+
+lt_input_stack = VALUE #( ( int = 16 )
+                    ( int =  17 )
+                    ( int = 4 )
+                    ( int = 3 )
+                    ( int = 5 )
+                    ( int =  2 )
+                    ).
+
+* Loop at lt_input records and use stack kind of
+LOOP AT lt_input_Stack INTO DATA(ls_input).
+
+  DATA(lv_tabix) = sy-tabix.
+
+  IF lt_temp_Stack IS INITIAL.
+    lt_Temp_Stack = VALUE #( BASE lt_temp_Stack ( int = ls_input-int val = 1 ) ).
+    CONTINUE.
+  ENDIF.
+
+* if current value is greater than the previous value, then store the value to temp stack
+  IF ls_input-int GE lt_temp_Stack[ lines( lt_Temp_Stack ) ]-int.
+    lt_Temp_Stack = VALUE #( BASE lt_temp_Stack ( int = ls_input-int val = 1 ) ).
+  ELSE.
+    ls_input-int = 0. " add as an -1 value
+    lt_Temp_Stack = VALUE #( BASE lt_temp_Stack ( int = ls_input-int val = -1 ) ).
+  ENDIF.
+
+ENDLOOP.
+
+LOOP AT lt_input_stack ASSIGNING FIELD-SYMBOL(<lfs_input>).
+
+  READ TABLE lt_temp_stack WITH KEY int = <lfs_input>-int INTO DATA(lv_stack_Value).
+*  If line exists,
+  DATA(lv_next_index) = sy-tabix + 1.
+  IF sy-subrc EQ 0 AND line_exists( lt_Temp_Stack[  lv_next_index  ] ).
+    <lfs_input>-int = lt_temp_Stack[  lv_next_index  ]-val.
+  ELSE.
+    <lfs_input>-int = -1.
+  ENDIF.
+
+ENDLOOP.
+
+
+
+
+
+
+* ENDLOOP.
+
+* #27. Remove elements.
+lt_input = VALUE #( ( int = 16 )
+                  ( int =  2 )
+                  ( int = 2 )
+                  ( int = 3 )
+                  ( int = 5 )
+                  ( int =  2 ) ).
+DATA(val) = 2.
+
+
+DATA(lv_p1) = 1.
+DATA(lv_p2) = lines( lt_input ).
+
+WHILE lv_p1 < lv_p2.
+
+  IF lt_input[ lv_p1 ]-int NE val.
+    lv_p1 = lv_p1 + 1.
+    CONTINUE.
+  ENDIF.
+
+  IF lt_input[ lv_P2 ]-int EQ val.
+    lv_p2 = lv_p2 - 1.
+    CONTINUE.
+  ENDIF.
+* Swap
+  DATA(lv_temp) = lt_input[ lv_p1 ].
+  lt_input[ lv_p1 ] = lt_input[ lv_p2 ].
+  lt_input[ lv_p2 ] = lv_temp.
+
+ENDWHILE.
+
+
+*---> WAVE PATTERN
+*arr = [ 20, 10 , 8, 6, 4 , 2 ]
+*
+*
+*2 4 6 8 10 20
+*
+*4 2 8 6 20 10
+
+
+
+SORT lt_input ASCENDING.
+
+DATA(lv_index) = 1.
+
+WHILE lv_index < lines( lt_input ).
+
+
+
+
+  READ TABLE lt_input ASSIGNING FIELD-SYMBOL(<lfs_value1>) INDEX lv_index.
+
+  READ TABLE lt_input ASSIGNING FIELD-SYMBOL(<lfs_value2>) INDEX lv_index + 1.
+
+  lv_temp = <lfs_value2>.
+
+  <lfs_value1> = <lfs_value2>.
+  <lfs_value2> = lv_temp.
+
+
+  lv_index = lv_index + 2. " Important
+
+ENDWHILE.
+
+
+*-- SORTING
+
+CLASS sort DEFINITION.
+
+  PUBLIC SECTION.
+*  Merge Sort
+
+    DATA: mt_merge TYPE STANDARD TABLE OF tt_input.
+    METHODS: merge_Sort IMPORTING iv_low           TYPE int2
+                                  iv_high          TYPE int2
+                                  it_input         TYPE tt_input
+                        RETURNING VALUE(ct_output) TYPE tt_input
+                        ,
+
+      merge IMPORTING it_input1            TYPE tt_input
+                      it_input2            TYPE tt_input
+            RETURNING VALUE(ct_merged_out) TYPE tt_input.
+
+
+* Quick Sort
+
+ENDCLASS.
+
+
+CLASS sort IMPLEMENTATION.
+
+  METHOD merge_sort.
+
+* First identify the mid value of the array to split arry into 2 parts
+    IF lines( it_input ) EQ 1.
+
+      ct_output = it_input. " Return the input table itself ( as it has only 1 value at the last iteration )
+
+      RETURN.
+    ENDIF.
+    " Exit condition. during last stack of the call, there will be only 1 element and both pointers will point the same.
+    DATA(lv_mid) = lines( it_input ) / 2.
+
+* SPlit left arrary values( 1 to mid value ) until the elements are split into seperate elements.
+*  This is acheived by calling the merge sort recursively.
+    DATA(lt_left) = merge_sort( EXPORTING iv_low = 1
+                                iv_high = CONV #( lv_mid )
+                                it_input = VALUE #( FOR ls_left IN it_input FROM iv_low TO iv_high
+                                                    (  CORRESPONDING #( ls_left ) ) ) ) ." move only those range of elements to next call/stack
+
+
+* SPlit Right arrary values( mid value + 1 to length ) until the elements are split into seperate elements
+
+    DATA(lt_right) = merge_Sort( EXPORTING iv_low = CONV #( lv_mid + 1 )
+                                           iv_high = lines( it_input ) " Length of the array .
+                                           it_input = VALUE #( FOR ls_right IN it_input FROM iv_low TO iv_high
+                                                   (  CORRESPONDING #( ls_right ) ) ) ) . " Move only those range of elements to next call/stack
+*                  CHANGING ct_input = ct_input ).
+** Merge the result at the end to sort the left and right array.
+    mt_merge  = VALUE #( BASE mt_merge ( merge( it_input1 = lt_left
+                                                it_input2 = lt_right ) ) ).
+
+  ENDMETHOD.
+
+
+  METHOD merge.
+
+* Note; IN SAP, the below merge logic can be completely removed by declaring MT_MERGE as SORTED TABLE and just do insert from both tables here ??!!
+    DATA: point1 TYPE sy-tabix VALUE 1,
+          point2 TYPE sy-tabix VALUE 1.
+
+*  Create two pointers point1 and point2 pointing table1 and table 2.
+
+    WHILE ( point1 LE lines( it_input1 ) ) AND ( point2 LE lines( it_input2 ) ).
+
+      IF it_input1[ point1 ] < it_input2[ point2 ].
+*     If left value is smaller, put it into array and increment point1
+        ct_merged_out = VALUE #( BASE ct_merged_out ( int = it_input1[ point1 ]-int ) ).
+        point1 = point1 + 1.
+
+      ELSE.
+*     If Right value is smaller, put it into array and increment point2
+        ct_merged_out = VALUE #( BASE ct_merged_out ( int = it_input2[ point2 ]-int ) ).
+        point2 = point2 + 1.
+      ENDIF.
+    ENDWHILE.
+*  Cases where left overs in either one of the array
+    IF point1 LT lines( it_input1 ).
+      ct_merged_out = VALUE #( BASE ct_merged_out FOR ls_output1 IN it_input1 FROM point1 + 1 TO lines( it_input1 )
+                             ( CORRESPONDING #( ls_output1 ) ) ).
+    ENDIF.
+
+
+    IF point2 LT lines( it_input2 ).
+      ct_merged_out = VALUE #( BASE ct_merged_out FOR ls_output2 IN it_input2 FROM point2 + 1 TO lines( it_input2 )
+                           ( CORRESPONDING #( ls_output2 ) ) ).
+
+
+    ENDIF.
+
+  ENDMETHOD.
+
+
+ENDCLASS.
+
+START-OF-SELECTION.
+
+  DATA(lc_merge) = NEW sort( ).
+
+  DATA(lt_merge_output) = lc_merge->merge_Sort( EXPORTING iv_low   = 1
+                                                          iv_high  = lines( lt_input )
+                                                          it_input = lt_input ).
+
+  IF sy-subrc EQ 0.
+    DATA lv_value TYPE string.
+    LOOP AT lt_merge_output INTO DATA(ls_merge_output).
+
+
+      WRITE: | { ls_merge_output-int } |.
+
+
+    ENDLOOP.
+
+  ENDIF.
+
+
+* Binary Search.
+* NOTE: THis works to search in a sorted array only.
+  lt_input = VALUE #( ( int = 2 )
+                 ( int =  2 )
+                 ( int = 3 )
+                 ( int = 7 )
+                 ( int = 9 )
+                 ( int = 10 ) ).
+
+  DATA(lv_target) = 9.
+
+
+  DATA(lv_lp) = 1.
+  DATA(lv_rp) = lines( lt_input ).
+
+
+  WHILE ( lv_lp LE lv_Rp ).
+
+
+
+* calculate mid value.
+    DATA(lv_mid) = ( lv_lp + lv_rp ) / 2.
+
+
+    IF lt_input[ lv_mid ]-int = lv_target.
+      EXIT . " Number found
+    ENDIF.
+    IF lv_target GT lt_input[ lv_mid ]-int. " traverse right side.
+
+*  change start pointer to lv_mid + 1 and end pointer no change
+      lv_lp = lv_mid + 1.
+
+
+    ELSE. " Traverse left side
+*   Change End Pointer
+      lv_rp = lv_mid.
+
+    ENDIF.
+
+  ENDWHILE.
+
+  IF lv_lp > lv_rp.
+*    RETURN -1. " No Values FOund
+  ENDIF.
+
+**----------------------------------------------------------------------------------***
+* Dup Check
+  lt_input = VALUE #( ( int = 2 )
+                   ( int =  2 )
+                   ( int = 3 )
+                   ( int = 7 )
+                   ( int = 9 )
+                   ( int = 10 ) ).
+
+
+
+  DATA lt_dup_Check TYPE HASHED TABLE OF ty_input WITH UNIQUE KEY int.
+
+
+
+  LOOP AT lt_input INTO DATA(ls_dup).
+
+* Check if the element is present in the hash set
+    READ TABLE lt_Dup_check WITH TABLE KEY int = ls_dup-int TRANSPORTING NO FIELDS.
+
+    IF sy-subrc EQ 0.
+      WRITE: |True|.
+      EXIT.
+    ENDIF.
+
+    INSERT ls_dup INTO TABLE lt_dup_check.
+
+  ENDLOOP.
+
+  WRITE:|False|.
+
+*---------------------------------------------------------------------------------------------**
+* Valid Anagram.
+
+  lv_String = 'cat'.
+  DATA(lv_String2) = 'act'.
+
+* Will it case sensitive. if not better convert the string to lower case. ??
+* cHECK HOW IT IS BEHAVING FOR CASE SENISTIVE
+
+  lv_String = to_lower( lv_String ).
+
+  DATA: lt_hashmap TYPE HASHED TABLE OF ty_stack WITH UNIQUE KEY int,
+        ls_hashmap TYPE ty_Stack.
+
+  IF strlen( lv_String ) NE strlen( lv_String2 ). " BAse Case.if length is different, then anagram is not possible.
+
+    WRITE:|False|.
+    EXIT.
+  ENDIF.
+
+  DO strlen( lv_String ) TIMES.
+
+    READ TABLE lt_hashmap WITH TABLE KEY int = lv_String+lv_index(1) ASSIGNING FIELD-SYMBOL(<lfs_hashmap>).
+
+    IF sy-subrc EQ 0 AND <lfs_hashmap> IS ASSIGNED.
+
+      <lfs_hashmap>-val = <lfs_hashmap>-val + 1.
+
+    ELSE.
+
+
+
+      ls_hashmap-int = lv_String+lv_index(1).
+      ls_hashmap-val = 1.
+
+      INSERT ls_hashmap INTO TABLE lt_hashmap.
+    ENDIF.
+
+  ENDDO.
+
+
+  DO strlen( lv_string2 ) TIMES.
+
+    READ TABLE lt_hashmap WITH TABLE KEY int = lv_String2+lv_index(1) ASSIGNING <lfs_hashmap> .
+
+    IF sy-subrc EQ 0 AND <lfs_hashmap> IS ASSIGNED.
+
+      IF <lfs_hashmap>-val GE 1.
+        <lfs_hashmap>-val = <lfs_hashmap>-val - 1.
+
+
+      ELSE.
+        WRITE: |False|. " Extra char are there hence not anagram.
+        EXIT.
+      ENDIF.
+
+
+    ELSE.
+      WRITE: |False|. " char is not present in first string. so is not anagram.
+      EXIT.
+    ENDIF.
+
+  ENDDO.
+
+
+  LOOP AT lt_hashmap TRANSPORTING NO FIELDS WHERE val IS NOT INITIAL .
+
+    WRITE: |FALSE|.
+
+
+  ENDLOOP.
+
+*   Solution 2. NOTE: SORTING A VARIABLE WONT WORK. DECLARE 2 SORTED TABLES and compare both .!!
+*  SORT LV_string.
+*  SORT LV_string
+
+
+*  IF LV_string NE LV_string2.
+*    WRITE |false|.
+*  ELSE.
+*    WRITE |True|.
+*  ENDIF.
+*-------------------------------------------------------------------------------------------------------------------*
+* Two Sum.
+
+* Sol 1 if Array is sorted already.
+
+* 2 Pointers
+
+  lt_input = VALUE #( ( int = 2 )
+                    ( int =  2 )
+                    ( int = 3 )
+                    ( int = 7 )
+                    ( int = 9 )
+                    ( int = 10 ) ).
+
+  DATA ls_inp TYPE ty_stack.
+  lv_Target = 5.
+
+* x + y =5
+
+  LOOP AT lt_input INTO DATA(ls_2sum).
+
+    DATA(lv_diff) = lv_target - ls_2sum-int.
+
+    READ TABLE lt_hashmap WITH TABLE KEY int = lv_diff ASSIGNING FIELD-SYMBOL(<lfs_2sum>).
+
+    IF sy-subrc = 0 AND <lfs_2sum> IS ASSIGNED.
+
+*    WRITE |{<lfs_2sum-val} {sy-tabix}|
+      EXIT .
+    ELSE.
+
+      ls_inp-int = ls_2sum-int.
+      ls_inp-val = sy-tabix. " Index Value
+
+      INSERT ls_inp INTO TABLE lt_hashmap.
+
+    ENDIF.
+
+
+  ENDLOOP.
+
+
+* Group Anagrams
+  TYPES:BEGIN OF ty_Grp_A,
+          string TYPE string,
+          value  TYPE string,
+        END OF ty_Grp_a.
+
+  TYPES: tt_grp_a TYPE STANDARD TABLE OF ty_Grp_a.
+  DATA: lt_String_Tab TYPE tt_grp_A.
+
+
+  lt_string_Tab = VALUE #( ( string = 'eat' )
+                           ( string = 'tea' )
+                           ( string = 'ate' )
+                           ( string = 'bat' ) ).
+
+  DATA lt_output_tab LIKE lt_string_Tab.
+
+  DATA ls_Grp_ang TYPE ty_Stack.
+* for each row, get the frequency count for each string and get the value as string and put it in new hash table.
+  DATA lv_freq TYPE string.
+  LOOP AT lt_String_tab INTO DATA(ls_string_tab).
+
+    DO strlen( ls_string_Tab-string ) TIMES.
+
+      READ TABLE lt_hashmap WITH TABLE KEY int = ls_string_tab-string+lv_index(1) ASSIGNING FIELD-SYMBOL(<lfs_grp_ang>).
+
+      IF sy-subrc EQ 0 AND <lfs_grp_ang> IS ASSIGNED.
+
+        <lfs_grp_ang>-val += 1.
+
+      ELSE.
+        ls_grp_ang-int = ls_string_tab-string+lv_index(1).
+        ls_grp_ang-val = 1.
+
+        INSERT ls_grp_ang INTO TABLE lt_hashmap.
+
+      ENDIF.
+
+    ENDDO.
+
+*  Concatenate the hashmap values eg. 1e1a1t and put it in new hashmap.
+
+    LOOP AT lt_hashmap INTO DATA(ls_freq).
+
+      lv_freq = lv_freq && ls_Freq-val && ls_freq-int.
+
+    ENDLOOP.
+
+    READ TABLE lt_output_tab WITH KEY string = lv_freq ASSIGNING FIELD-SYMBOL(<lfs_freq>).
+
+    IF sy-subrc EQ 0 AND <Lfs_freq> IS ASSIGNED.
+      <lfs_freq>-value =  <lfs_freq>-value && ',' && lv_freq. " grouping the values which has same pattern
+    ELSE.
+
+      ls_grp_ang-int = lv_freq.
+      ls_grp_ang-val = lv_freq.
+
+    ENDIF.
+
+  ENDLOOP.
+
+* ---------------------------------------------------------------------------------------------------
+
+* Top K frequent elements
+  lt_input = VALUE #( ( int = 2 )
+                ( int =  2 )
+                ( int = 3 )
+                ( int = 9 )
+                ( int = 9 )
+                ( int = 10 ) ).
+
+  DATA lv_freq_count TYPE int2 VALUE 2.
+
+*  Design hashmap and store the key + frequency
+*  DATA lt_freq_elem TYPE STANDARD TABLE OF ty_stack WITH UNIQUE SORTED KEY topk COMPONENTS int.
+  DATA lt_freq_elem TYPE SORTED TABLE OF  ty_stack WITH UNIQUE KEY primary_key COMPONENTS int.
+  DATA ls_freq_elem TYPE ty_stack.
+
+
+  LOOP AT lt_input INTO DATA(ls_topk).
+
+    READ TABLE lt_freq_elem WITH TABLE KEY primary_key COMPONENTS  int = ls_topk-int ASSIGNING FIELD-SYMBOL(<lfs_topk>).
+
+    IF sy-subrc EQ 0 AND <lfs_Topk> IS ASSIGNED.
+
+      <lfs_topk>-val += 1.
+
+    ELSE.
+
+      ls_Freq_elem-int = ls_topk-int.
+      ls_Freq_elem-val = 1.
+
+      INSERT ls_freq_elem INTO TABLE lt_Freq_Elem. "
+    ENDIF.
+  ENDLOOP.
+
+  LOOP AT lt_freq_elem FROM 1 TO lv_freq_count INTO DATA(ls_elem). " This is sorted by INT but we need it in VAL sorted .
+
+    WRITE ls_Elem-int.
+  ENDLOOP.
+
+*  Product of Array except self
+  DATA lv_prod TYPE i.
+
+*   IF div operation is allowed, we can directly divide the i/ total prod to get each value.
+
+* else, we need to calculate postfix prod & prefix prod and for each element i will give prefix prod * postfix prod.
+
+  lt_input = VALUE #( ( int = 2 )
+                 ( int =  2 )
+                 ( int = 3 )
+                 ( int = 9 )
+                 ( int = 9 )
+                 ( int = 10 ) ).
+
+  DATA ls_prod_self TYPE ty_input.
+
+  DATA lt_prefix LIKE lt_input.
+  DATA lt_postfix LIKE lt_input.
+* Do prefix product for each element.
+
+  LOOP AT lt_input INTO DATA(ls_prod).
+
+    IF sy-tabix = 1. " For prefix, the first element can be set to 1 by default
+
+      lv_prod = 1.
+
+      ls_prod_self-int = lv_prod.
+
+      APPEND ls_prod TO lt_prefix.
+
+    ELSE.
+
+
+      lv_prod = lv_prod * ls_prod-int.
+
+      ls_prod_self-int = lv_prod.
+
+      APPEND ls_prod TO lt_prefix.
+
+    ENDIF.
+
+  ENDLOOP.
+
+  LOOP AT lt_input INTO ls_prod .
+
+    IF sy-tabix = lines( lt_input ). " For postfix, last element can be set to 1.
+
+      lv_prod = 1.
+      ls_prod_self-int = lv_prod.
+
+      APPEND ls_prod TO lt_postfix.
+
+    ELSE.
+
+      lv_prod = lv_prod * ls_prod-int.
+
+      ls_prod_self-int = lv_prod.
+
+      APPEND ls_prod TO lt_postfix.
+
+
+    ENDIF.
+
+  ENDLOOP.
+
+
+*  Longest Consequitive Sequence.
+  lt_input = VALUE #( ( int = 2 )
+                   ( int =  3 )
+                   ( int = 1 )
+                   ( int = 9 )
+                   ( int = 4 )
+                   ( int = 10 ) ).
+
+*  DATA ls_prod_self TYPE ty_input.
+
+
+  DATA lt_sorted_table TYPE SORTED TABLE OF ty_input WITH UNIQUE KEY int.
+
+
+* put the records into the sorted table.
+
+*  LOOP AT lt_input INTO DATA(ls_sorted_Table).
+*
+*    INSERT ls_sorted_Table INTO TABLE lt_sorted_table.
+*
+*  ENDLOOP.
+
+  lt_sorted_Table = lt_input. "Records rearranged to sorted ??
+
+
+*  records are sorted in ascending. Now check max count of consequtive sequence.
+
+  CLEAR: lv_lp, lv_rp.
+
+  lv_lp = 1.
+  lv_rp = 2.
+
+  DATA: lv_seq_count TYPE i,
+        lv_max_count TYPE i.
+
+  WHILE lv_Rp LE lines( lt_sorted_Table ).
+
+    IF lt_sorted_Table[ lv_lp ]-int = lt_sorted_Table[ lv_rp ]-int.
+
+      lv_seq_count += 1.
+
+      lv_rp = lv_rp + 1. " increment right pointer
+
+    ELSE.
+
+      lv_max_count = COND #( WHEN Lv_seq_Count GT lv_max_Count THEN lv_Seq_count ELSE lv_max_count ).
+
+      lv_lp = lv_rp + 1. " move the left pointer to the rp + 1.
+
+      lv_rp = lv_lp + 1.
+
+
+    ENDIF.
+
+  ENDWHILE.
+
+* Without using extra space.
+
+  DATA lv_check_no TYPE i.
+*  for the input, figure out whether that is a starting of a sequence or not. it can be checked by checking N-1 exists in the array or not.
+
+  LOOP AT lt_input INTO ls_input. " Loop through the array.
+
+    lv_check_no = ls_input-int - 1.
+
+    IF line_exists( lt_input[ lv_check_no ] ). " if prev no not exists, then we can consider that as start of the string.
+
+      lv_check_no = ls_input-int.
+
+      WHILE line_exists( lt_input[ lv_check_no ] ).
+
+        lv_check_no += 1. " Check for next number.
+
+        lv_seq_count = lv_seq_count + 1.
+
+      ENDWHILE.
+
+    ENDIF.
+
+    lv_max_Count = COND #( WHEN lv_seq_count GT lv_max_count THEN lv_seq_count ELSE lv_max_count ).
+
+
+  ENDLOOP.
+
+* Best Time to buy & sell stocks
+  lt_input = VALUE #( ( int = 2 )
+                   ( int =  3 )
+                   ( int = 1 )
+                   ( int = 9 )
+                   ( int = 4 )
+                   ( int = 10 ) ).
+
+
+
+* 2pointer approach.
+
+*lv_lp --> points to the buy place ( minimum value )
+* lv_Rp -> points to the sell place ( max value )
+
+  lv_lp = 1.
+  lv_Rp = lv_lp + 1.
+
+  DATA lv_profit TYPE i.
+  DATA lv_max_profit TYPE i.
+
+  WHILE lv_rp LE lines( lt_input ).
+
+    IF lt_input[ lv_rp ]-int LE lt_input[ lv_lp ]-int. " If right pointer is smaller, then we can choose that day to buy. so s
+
+      lv_lp = lv_rp. " Move the left pointer.
+      lv_Rp = lv_rp + 1. "Increment Right Pointer.
+
+    ELSE.
+
+      lv_profit = lt_input[ lv_rp ]-int - lt_input[ lv_lp ]-int.
+
+      lv_rp = lv_rp + 1. " Increment only the right pointer.
+
+    ENDIF.
+
+
+    lv_max_profit = COND #( WHEN lv_max_profit GT lv_profit THEN lv_max_profit
+                            ELSE lv_profit ).
+
+  ENDWHILE.
+
+
+* Longest substring w/o repeating char
+
+  lv_string = |abcabcbb|.
+
+*  Sliding Window
+  lv_lp = 1.
+  lv_rp = 1.
+
+  DATA lt_substr TYPE SORTED TABLE OF ty_stack WITH UNIQUE KEY val.
+
+  DATA ls_stack TYPE ty_stack.
+
+
+  WHILE lv_rp LE strlen( lv_string ).
+
+
+    IF NOT line_exists( lt_substr[ int = lv_string+lv_lp(1) ] ). " if no duplicates occurs
+
+      ls_stack-int = lv_string+lv_lp(1).
+      ls_stack-val = sy-index. " Store index value.
+      INSERT ls_Stack INTO TABLE lt_substr.
+      lv_rp = lv_rp + 1. " Increment Right pointer.
+
+    ELSE. "If duplicates occurs, then we need to delete char from hashset till that point and shift the pointers.
+
+      READ TABLE lt_substr WITH KEY int = lv_string+lv_lp(1) TRANSPORTING NO FIELDS.
+
+      IF sy-subrc EQ 0.
+        DATA(lv_Del_index) = sy-tabix.
+      ENDIF.
+
+      lv_max_count = COND #( WHEN lv_max_count GT lines( lt_Substr ) THEN lv_max_count ELSE lines( lt_Substr ) ).  " store the unique values.
+
+      DO lv_del_index TIMES.
+
+        DELETE lt_substr INDEX sy-index.
+
+      ENDDO.
+*   Insert the current value to hashset again.
+      ls_Stack-int = lv_string+lv_lp(1).
+      ls_stack-val = lv_rp.
+
+*  Shift the pointers.
+
+      lv_lp = lv_del_index + 1. " now left pointer points to new start range.
+      lv_Rp = lv_rp + 1.
+
+    ENDIF.
+
+
+
+  ENDWHILE.
+
+
+
+*  Minimum Window Substring
+
+  lv_string = |ABCBBA|.
+
+  DATA lv_k TYPE i VALUE 2.
+*  Sliding Window
+  lv_lp = 1.
+  lv_rp = 1.
+
+  DATA lt_stack TYPE SORTED TABLE OF ty_stack WITH UNIQUE KEY val.
+
+*  DATA ls_stack TYPE ty_stack.
+
+  DATA lv_replace_Count TYPE i.
+
+  WHILE lv_Rp LE strlen( lv_string ).
+
+
+    IF NOT line_Exists( lt_substr[ int = lv_String+lv_lp(1) ] ).
+*   If no value exists then insert in the table.
+      ls_stack-int = lv_String+lv_lp(1). " char
+      ls_Stack-val = 1. " Store the count value.
+
+      INSERT ls_Stack INTO TABLE lt_stack.
+
+
+    ELSE. "If line exists, increment the count value.
+
+      READ TABLE lt_stack WITH KEY int = lv_String+lv_lp(1) ASSIGNING FIELD-SYMBOL(<lfs_stack>).
+
+      IF sy-subrc EQ 0.
+
+        <lfs_stack>-val += 1.
+
+      ENDIF.
+
+    ENDIF.
+* How to find the number of characters to be replaced?
+
+*    No. of char to be replaced = length of the current window size - MAX FREQ VALUE in the hash set.
+
+*    Max freq in the hash set -> read the last index value as it is sorted table ascending VAL by default.
+    DATA(lv_window_length) = ( lv_rp - lv_lp ) + 1.
+
+    lv_replace_count = lv_window_length - lt_substr[ lines( lt_substr ) ]-val.  " " ABBAACC
+
+    IF lv_replace_Count LE lv_k. " if the replace count is less than the allowed count, we are good.
+
+
+    ELSE. " Change the window starting postion & decrement the count value for the value at the starting position
+
+      READ TABLE lt_stack WITH KEY int = lv_String+lv_lp(1) ASSIGNING <lfs_stack>.
+
+      IF sy-subrc EQ 0.
+
+        <lfs_stack>-val = <lfs_stack>-val - 1.
+
+      ENDIF.
+
+* store the max count.
+      lv_max_count = COND #( WHEN lv_max_Count GE lv_window_length THEN lv_max_count ELSE lv_window_length ).
+*  Increment Left Pointer
+      lv_lp = lv_lp + 1.
+
+    ENDIF.
+
+* Increment rp.
+    lv_Rp = lv_rp + 1.
+
+
+  ENDWHILE.
+
+*  3 Sum
+  lt_input = VALUE #( ( int = 2 )
+                   ( int =  3 )
+                   ( int = 1 )
+                   ( int = 9 )
+                   ( int = 4 )
+                   ( int = 10 ) ).
+
+
+  DATA lv_total TYPE int2 VALUE 20.
+
+  DATA lt_3sum TYPE HASHED TABLE OF ty_input WITH UNIQUE KEY int.
+
+  DATA ls_3sum TYPE ty_input.
+
+*  o(N^2) logic.
+
+* For each number in input, compute the 2 sum.
+  DO  lines( lt_input ) - 1 TIMES.
+
+*    x + y + z = 20
+*    2 +
+    DATA(lv_X) = lt_input[ sy-tabix ]-int.
+
+* 2 sum logic.
+    LOOP AT lt_input INTO DATA(lv_y) FROM sy-index. "compare the remaining numbers
+
+      lv_diff = lv_total - ( lv_x + lv_y-int ).
+
+*   If diff not exists in the hash table, then load the value
+      READ TABLE lt_3sum ASSIGNING FIELD-SYMBOL(<lfs_3sum>) WITH TABLE KEY int = lv_diff.
+
+      IF sy-subrc EQ 0.
+
+        DATA(lv_z) = <lfs_3sum>-int.
+
+        EXIT.
+      ELSE.
+        ls_3sum-int = lv_diff.
+        INSERT ls_3sum INTO TABLE lt_3sum.
+      ENDIF.
+
+    ENDLOOP.
+    CLEAR lt_3sum. " clear the hash table after each element in the input.
+  ENDDO.
+
+
+* Max sum subarray
+  lt_input = VALUE #( ( int = 2 )
+                     ( int =  -3 )
+                     ( int = 1 )
+                     ( int = -9 )
+                     ( int = 0 )
+                     ( int = 10 )
+                     ( int = 3 ) ).
+
+
+  lv_lp = 1.
+  lv_Rp = lv_lp + 1.
+
+  DATA lv_sum TYPE i.
+  DATA lv_max_sum TYPE i.
+
+  lv_Sum = lt_input[ 1 ]-int.
+
+  WHILE lv_rp LE lines( lt_input ).
+
+    lv_sum = lv_sum + lt_input[ lv_Rp ]-int.
+
+    IF lv_sum LE 0.
+*  If sum is negative, we dont even consider the elements so far as it anyways dont add any value to the max sum,
+      lv_lp = lv_rp + 1.
+      lv_rp = lv_lp + 1.
+      lv_sum = lt_input[ lv_lp ]-int.
+
+    ELSE.
+      lv_rp = lv_Rp + 1. " Increment only the RP
+
+    ENDIF.
+
+    lv_max_sum = COND #( WHEN lv_sum GE lv_max_Sum THEN lv_sum ELSE lv_max_sum ).
+
+  ENDWHILE.
+
+* Chocolate Distribution Problem
+
+  lt_input = VALUE #( ( int = 7 )
+                   ( int =  3 )
+                   ( int = 2 )
+                   ( int = 4 )
+                   ( int = 9 )
+                   ( int = 12 )
+                   ( int = 56 ) ).
+
+  DATA lv_count TYPE i VALUE 3.
+* LEts sort the array.
+
+  SORT lt_input.
+
+*use sliding window of fixed size lv_count and find the diff bt max and min in each window.
+
+  lv_lp = 1.
+  lv_Rp = lv_count.
+
+  DATA lv_total_min TYPE i.
+  DATA lv_min TYPE i.
+  lv_total_min = 56 . " Keeping the max possible value since we want to compute the min.
+
+
+
+  WHILE lv_rp LE lines( lt_input ).
+
+    lv_min = lt_input[ lv_rp ]-int - lt_input[ lv_lp ]-int.
+
+    lv_lp = lv_lp + 1.
+    lv_rp = lv_Rp + 1.
+
+    lv_total_min = COND #( WHEN lv_total LE lv_total_min THEN lv_total ELSE lv_total_min ).
+
+  ENDWHILE.
+
+
+
+
+* Minimum Swap required to Sort an Array
+  lt_input = VALUE #( ( int = 2 )
+                     ( int =  4 )
+                     ( int = 3 )
+                     ( int = 1 )
+                     ( int = 5 )
+                      ).
+
+
+* Create a sorted array
+  DATA lt_sort TYPE SORTED TABLE OF ty_input WITH UNIQUE KEY int.
+
+
+  lt_sort = lt_input.
+
+  DATA lv_swap TYPE i.
+
+  LOOP AT lt_input ASSIGNING FIELD-SYMBOL(<lfs_swap>).
+
+*  check if the current value and the value at the hash is equal
+    IF <lfs_swap>-int NE lt_sort[ sy-tabix ]-int.
+
+* swap the positions of the actual value to be in the current place by reading the value at the hash table.
+
+      READ TABLE lt_input ASSIGNING FIELD-SYMBOL(<lfs_target>) WITH KEY int = lt_sort[ sy-tabix ]-int.
+
+      IF <lfs_target> IS ASSIGNED.
+*     Do the swap here; current value of lt_input to
+        <lfs_target>-int = <lfs_swap>-int.
+        <lfs_swap>-int  = lt_sort[ sy-tabix ]-int.
+
+*  Increment the swap count.
+        lv_swap = lv_Swap + 1.
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+
+* Adding 1 more constraint-> Min Swap required to sort an array WITH ADJACENT SWAPPING ONLY ALLOWED
+* Here same concept but we need to store the difference in the values as swap count
+  lt_input = VALUE #( ( int = 1 )
+                     ( int =  0 )
+                     ( int = 1 )
+                     ( int = 0 )
+                     ( int = 1 )
+                      ).
+
+* Create a sorted array
+  lt_sort = lt_input.
+
+  LOOP AT lt_input ASSIGNING <lfs_swap>.
+
+*  check if the current value and the value at the hash is equal
+    IF <lfs_swap>-int NE lt_sort[ sy-tabix ]-int.
+
+      DATA(lv_l1) = sy-tabix.
+
+* swap the positions of the actual value to be in the current place by reading the value at the hash table.
+
+      READ TABLE lt_input ASSIGNING <lfs_target> WITH KEY int = lt_sort[ sy-tabix ]-int.
+
+      IF <lfs_target> IS ASSIGNED.
+        DATA(lv_l2) = sy-tabix.
+*     Do the swap here; current value of lt_input to
+        <lfs_target>-int = <lfs_swap>-int.
+        <lfs_swap>-int  = lt_sort[ sy-tabix ]-int.
+
+*  Increment the swap count. " MAIN DIFFERENCE IS HERE INSTEAD OF ADDING +1 < INSTEAD ADD THE DIFFERENCE BT THE ROWS COUNT
+*        lv_swap = lv_Swap + 1.-
+        lv_Swap = lv_Swap + ( lv_l2 - lv_l1 ).
+      ENDIF.
+    ENDIF.
+
+  ENDLOOP.
+
+* Kth largets element
+
+
+* Permutation in string
+lv_String = 'ab'.
+lv_string2 = 'eibac'.
+
+
+DATA lt_hashset TYPE SORTED TABLE OF ty_stack WITH NON-UNIQUE KEY int.
+DATA ls_hashset TYPE ty_input.
+
+lv_lp = 1.
+lv_rp = strlen( lv_string ).
+* Using sliding window? here hashmap is possible but we need to track the index also because this string should be continuous but orders can be different.
+
+do strlen( lv_string ) TIMES.
+
+  ls_hashset-int = lv_String+lv_index(1).
+
+  INSERT ls_hashset INTO lt_hashset.
+
+
+ ENDDO.
+
+
+DATA lv_True TYPE abap_bool VALUE abap_true.
+
+WHILE lv_rp LE strlen( lv_String2 ).
+
+
+  DO strlen( lv_String ) TIMES.
+
+    lv_index = sy-index - 1.
+
+*    Check the hashmap here and if any char is not found, set flag to false. else exit and return true.
+    READ TABLE lt_hashset WITH TABLE KEY int = lv_String+lv_index(1) ASSIGNING FIELD-SYMBOL(<lfs_perm>).
+
+    IF sy-subrc eq 0.
+
+      <lfs_perm>-val = <lfs_perm>-val - 1.
+    ELSE.
+      lv_true = abap_False.
+        EXIT.
+    ENDIF.
+    ENDDO.
+
+    DELETE lt_hashset WHERE val LE 0.
+    IF lv_true = abap_True.
+      EXIT.
+    ELSE.
+      lv_lp = lv_lp + 1.
+      lv_rp = lv_rp + 1.
+      lv_True = abap_True.
+    ENDIF.
+
+
+  ENDWHILE.
+
+
+* Maximum Product Subarray!! REALLY INTERSTING--!!
+* uSing two pointers
+* do a liner product left to right -> get the maximum
+* Do a liner product right to left -> get the maximum
+* Compare both the maximum and find the maximum
+  .
